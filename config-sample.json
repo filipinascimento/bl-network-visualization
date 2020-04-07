@@ -1,0 +1,9 @@
+{
+    "index": "data/index.json",
+    "label": "data/label.json",
+    "csv": "data/csv",
+    "color-property": "community",
+    "size-property":"degree",
+    "plot-labels": true,
+    "plot-null-models":false
+}
