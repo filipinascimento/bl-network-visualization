@@ -285,6 +285,6 @@ with open(os.path.join(outputDirectory,"index.json"), "w") as fd:
 with open(os.path.join(outputDirectory,"label.json"), "w") as fd:
 	json.dump(labelData,fd)
 
-with open(os.path.join(outputDirectory,"product.json"), "w") as fd:
+with open("product.json", "w") as fd:
 	json.dump(productData,fd)
 
