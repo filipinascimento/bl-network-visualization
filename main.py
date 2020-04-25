@@ -203,7 +203,7 @@ for entry in indexData:
 	for filename in tqdm(filenames):
 		adjacencyMatrix = loadCSVMatrix(os.path.join(CSVDirectory, filename))
 		directionMode=ig.ADJ_DIRECTED
-		weights = adjacencyMatrix
+		weights = np.abs(adjacencyMatrix)
 		if(check_symmetric(adjacencyMatrix)):
 			directionMode=ig.ADJ_UPPER
 			weights = weights[np.triu_indices(weights.shape[0], k = 0)]
@@ -216,7 +216,10 @@ for entry in indexData:
 		graph.vs["degree"] = g.degree()
 		graph.vs["indegree"] = g.indegree()
 		graph.vs["outdegree"] = g.outdegree()
-
+		
+		graph.vs["strength"] = g.strength(weights = ('weight' if weighted else None))
+		graph.vs["instrength"] = g.strength(mode="IN", weights = ('weight' if weighted else None))
+		graph.vs["outstrength"] = g.strength(mode="OUT", weights = ('weight' if weighted else None))
 		sizeArray = graph.vs[sizeProperty]
 		maxProperty = max(sizeArray)
 
@@ -261,7 +264,7 @@ for entry in indexData:
 		ax.set_facecolor("grey")
 		plt.savefig(outputFile)
 		pic_IObytes = io.BytesIO()
-		plt.savefig(pic_IObytes,dpi=35,  format='png')
+		plt.savefig(pic_IObytes,dpi=70,  format='png')
 		pic_IObytes.seek(0)
 		pic_hash = base64.b64encode(pic_IObytes.read())
 		productData["brainlife"].append( { 

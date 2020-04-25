@@ -11,6 +11,7 @@ set -x
 # alpha=$(jq -r .alpha config.json)
 # ./main.py $networkName $realizations $alpha
 
+echo "Configuring Singularity..."
 chmod +x main.py
 SINGULARITYENV_PYTHONNOUSERSITE=true singularity exec -e docker://filsilva/cxnetwork:0.1.0 ./main.py config.json
 
