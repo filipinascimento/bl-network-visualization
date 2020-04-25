@@ -13,7 +13,8 @@ import igraph as ig
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-
+import base64
+import io 
 
 _styleColors = [
 	"#1f77b4",
@@ -117,6 +118,9 @@ with open(labelFilename, "r") as fd:
 
 labels = [entry["name"].replace(".label","") for entry in labelData]
 
+productData = {
+	"brainlife":[]
+}
 
 def sortByFrequency(arr):
 	s = set(arr)
@@ -256,6 +260,15 @@ for entry in indexData:
 		plt.axis("off")
 		ax.set_facecolor("grey")
 		plt.savefig(outputFile)
+		pic_IObytes = io.BytesIO()
+		plt.savefig(pic_IObytes,  format='png')
+		pic_IObytes.seek(0)
+		pic_hash = base64.b64encode(pic_IObytes.read())
+		productData.append( { 
+				"type": "image/png", 
+				"name": outputBaseName,
+				"base64": pic_hash,
+		})
 		plt.close()
 		
 		
@@ -271,4 +284,7 @@ with open(os.path.join(outputDirectory,"index.json"), "w") as fd:
 
 with open(os.path.join(outputDirectory,"label.json"), "w") as fd:
 	json.dump(labelData,fd)
+
+with open(os.path.join(outputDirectory,"product.json"), "w") as fd:
+	json.dump(productData,fd)
 
