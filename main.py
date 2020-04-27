@@ -13,7 +13,8 @@ import igraph as ig
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-
+import base64
+import io 
 
 _styleColors = [
 	"#1f77b4",
@@ -117,6 +118,9 @@ with open(labelFilename, "r") as fd:
 
 labels = [entry["name"].replace(".label","") for entry in labelData]
 
+productData = {
+	"brainlife":[]
+}
 
 def sortByFrequency(arr):
 	s = set(arr)
@@ -136,13 +140,18 @@ def drawGraph(graph,ax):
 	# print(graph.vcount())
 	# print("Layouting...");
 	#positions = np.array(graph.layout_drl());
-	positions = np.array(graph.layout_lgl(maxiter=1000,coolexp = 2.0));
+	positions = np.array(graph.layout_lgl(maxiter=1000,coolexp = 2.0))
 	# print("Plotting...");
 	linesX = []
 	linesY = []
 	segments = []
 	positionsX = positions[:,0]
 	positionsY = positions[:,1]
+	lineWidths = []
+	isWeighted = False
+	if("weight" in g.edge_attributes()):
+		isWeighted= True
+		maxWeight = np.max(g.es["weight"])
 	for edge in graph.es:
 		source = edge.source
 		target = edge.target
@@ -156,9 +165,17 @@ def drawGraph(graph,ax):
 		linesY.append(fy)
 		linesY.append(ty)
 		linesY.append(None)
+
+		width = 1.5
+		if(isWeighted):
+			width = edge["weight"]/maxWeight*4+0.5
+		lineWidths.append(width)
+		# lineWidths.append(0.0)
+		# lineWidths.append(width)
+
 		segments.append([(fx, fy), (tx, ty)])
 	# plt.plot(linesX,linesY,alpha=0.1);
-	lc = mc.LineCollection(segments, colors=graph.es["color"], linewidths=1.5)
+	lc = mc.LineCollection(segments, colors=graph.es["color"], linewidths=lineWidths)
 	ax.add_collection(lc)
 	# print("Finished Plotting...");
 		
@@ -196,10 +213,14 @@ for entry in indexData:
 	if("community" in entry):
 		hasCommunities = (entry["community"]==True)
 	
+	properties = {}
+	if("properties" in entry):
+		properties = {propName.lower():propName for propName in entry["properties"]}
+
 	for filename in tqdm(filenames):
 		adjacencyMatrix = loadCSVMatrix(os.path.join(CSVDirectory, filename))
 		directionMode=ig.ADJ_DIRECTED
-		weights = adjacencyMatrix
+		weights = np.abs(adjacencyMatrix)
 		if(check_symmetric(adjacencyMatrix)):
 			directionMode=ig.ADJ_UPPER
 			weights = weights[np.triu_indices(weights.shape[0], k = 0)]
@@ -212,26 +233,36 @@ for entry in indexData:
 		graph.vs["degree"] = g.degree()
 		graph.vs["indegree"] = g.indegree()
 		graph.vs["outdegree"] = g.outdegree()
-
+		
+		graph.vs["strength"] = g.strength(weights = ('weight' if weighted else None))
+		graph.vs["instrength"] = g.strength(mode="IN", weights = ('weight' if weighted else None))
+		graph.vs["outstrength"] = g.strength(mode="OUT", weights = ('weight' if weighted else None))
 		sizeArray = graph.vs[sizeProperty]
 		maxProperty = max(sizeArray)
 
 		graph.vs["vertex_size"] = [x/maxProperty*200+4 for x in sizeArray]
 		
-		if(hasCommunities):
-			inputBaseName,_ = os.path.splitext(filename)
-			communities = [];
-			with open(os.path.join(CSVDirectory,"%s_community.txt"%os.path.basename(inputBaseName)), "r") as fd:
+		inputBaseName,_ = os.path.splitext(filename)
+		communitiesFilePath = os.path.join(CSVDirectory,"%s_community.txt"%os.path.basename(inputBaseName))
+		
+		if(hasCommunities and os.path.exists(communitiesFilePath)):
+			communities = []
+			with open(communitiesFilePath, "r") as fd:
 				for line in fd:
 					communities.append(line.strip());
 			graph.vs["Community"] = communities;
-						
 
-
+		for propID,propName in properties.items():
+			propFilename = os.path.join(CSVDirectory,"%s_prop_%s.txt"%(os.path.basename(inputBaseName),propName))
+			if(os.path.exists(propFilename)):
+				propData = np.loadtxt(propFilename)
+				graph.vs[propID] = propData
 
 		if("Community" not in graph.vertex_attributes() or colorProperty!="community"):
-			colormap = plt.get_cmap("winter");
-			colorPropertyArray = np.array(graph.vs[colorProperty]);
+			colormap = plt.get_cmap("winter")
+			if(colorProperty not in graph.vertex_attributes()):
+				colorProperty="degree"
+			colorPropertyArray = np.array(graph.vs[colorProperty])
 			colorPropertyTransformed = np.log(colorPropertyArray+1.0)
 			colorPropertyTransformed -= np.min(colorPropertyTransformed)
 			colorPropertyTransformed /= np.max(colorPropertyTransformed)
@@ -256,6 +287,15 @@ for entry in indexData:
 		plt.axis("off")
 		ax.set_facecolor("grey")
 		plt.savefig(outputFile)
+		pic_IObytes = io.BytesIO()
+		plt.savefig(pic_IObytes,dpi=70,  format='png')
+		pic_IObytes.seek(0)
+		pic_hash = base64.b64encode(pic_IObytes.read())
+		productData["brainlife"].append( { 
+				"type": "image/png", 
+				"name": outputBaseName,
+				"base64": pic_hash.decode("utf8"),
+		})
 		plt.close()
 		
 		
@@ -271,4 +311,7 @@ with open(os.path.join(outputDirectory,"index.json"), "w") as fd:
 
 with open(os.path.join(outputDirectory,"label.json"), "w") as fd:
 	json.dump(labelData,fd)
+
+with open("product.json", "w") as fd:
+	json.dump(productData,fd)
 

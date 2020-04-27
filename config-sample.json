@@ -3,7 +3,7 @@
     "label": "data/label.json",
     "csv": "data/csv",
     "color-property": "community",
-    "size-property":"degree",
+    "size-property":"strength",
     "plot-labels": true,
     "plot-null-models":false
 }
