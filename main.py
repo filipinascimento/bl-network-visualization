@@ -288,7 +288,7 @@ for entry in indexData:
 		ax.set_facecolor("grey")
 		plt.savefig(outputFile)
 		pic_IObytes = io.BytesIO()
-		plt.savefig(pic_IObytes,dpi=70,  format='png')
+		plt.savefig(pic_IObytes,dpi=35,  format='png')
 		pic_IObytes.seek(0)
 		pic_hash = base64.b64encode(pic_IObytes.read())
 		productData["brainlife"].append( { 
