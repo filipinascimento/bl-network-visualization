@@ -9,6 +9,11 @@ import math
 import numpy as np
 from tqdm import tqdm
 import igraph as ig
+
+import scipy
+import scipy.cluster.hierarchy as sch
+import pandas as pd
+
 # import infomap
 
 import matplotlib as mpl
@@ -41,15 +46,40 @@ _styleColors = [
 	"#9edae5",
 ];
 
+import matplotlib.pyplot as plt
+def plot_corr(df,names,size=10,ax=None):
+	'''Plot a graphical correlation matrix for a dataframe.
+
+	Input:
+			df: pandas DataFrame
+			size: vertical and horizontal size of the plot'''
+	
+
+	# Compute the correlation matrix for the received dataframe
+	corr = df
+	
+	# Plot the correlation matrix
+	if(ax is None):
+		fig, ax = plt.subplots(figsize=(size, size))
+	cax = ax.matshow(corr, cmap='RdYlGn',vmax=1,vmin=-1,interpolation=None)
+	ax.set_xticks(range(len(corr.columns)));
+	ax.set_yticks(range(len(corr.columns)));
+	ax.set_xticklabels(names, rotation=90);
+	ax.set_yticklabels(names);
+	ax.tick_params(axis='both', which='major', labelsize=2.1)
+	ax.tick_params(axis='both', which='minor', labelsize=2.1)
+	# Add the colorbar legend
+	# cbar = fig.colorbar(cax, ticks=[-1, -0.75, -0.5, -0.25,0 , 0.25, 0.5, 0.75, 1], aspect=40, shrink=.6)
+
 def adjust_lightness(color, amount=0.5):
-    import matplotlib.colors as mc
-    import colorsys
-    try:
-        c = mc.cnames[color]
-    except:
-        c = color
-    c = colorsys.rgb_to_hls(*mc.to_rgb(c))
-    return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
+		import matplotlib.colors as mc
+		import colorsys
+		try:
+				c = mc.cnames[color]
+		except:
+				c = color
+		c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+		return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
 def isFloat(value):
 	if(value is None):
@@ -280,11 +310,63 @@ if(len(networks)>0):
 		network.es[edgeIndex]['color'] = network.vs["color"][sourceIndex]+"20"
 
 	outputFile = os.path.join(outputDirectory,"report.pdf")
-	fig, ax = plt.subplots(figsize=(10,10))
+	fig, (ax,ax2) = plt.subplots(ncols=2,figsize=(20,10))
 	
+
 	drawGraph(network,ax)
-	plt.axis("off")
+	ax.axis('off')
 	ax.set_facecolor("grey")
+
+
+	cluster_th = 4
+	if(weighted):
+		adjacencyMatrix = network.get_adjacency(attribute='weight').data
+	else:
+		adjacencyMatrix = network.get_adjacency().data
+
+	if("name" in network.vertex_attributes()):
+		names = network.vs["name"]
+	else:
+		names = [str(i) for i in range(network.vcount())]
+		
+	df = pd.DataFrame(adjacencyMatrix)
+	corrMatrix = df.corr();
+
+		
+	X = corrMatrix.values
+	d = sch.distance.pdist(X)
+	L = sch.linkage(d, method='complete')
+	ind = sch.fcluster(L, 0.5*d.max(), 'distance')
+
+	columns = [corrMatrix.columns.tolist()[i] for i in list(np.argsort(ind))]
+	corrMatrix = corrMatrix.reindex(columns, axis=1)
+
+	unique, counts = np.unique(ind, return_counts=True)
+	counts = dict(zip(unique, counts))
+
+	i = 0
+	j = 0
+	columns = []
+	for cluster_l1 in set(sorted(ind)):
+			j += counts[cluster_l1]
+			sub = corrMatrix.columns[i:j]
+			if counts[cluster_l1]>cluster_th:
+					X = corrMatrix.loc[ sub , sub].values
+	#         X = sub.corr().values
+					d = sch.distance.pdist(X)
+					L = sch.linkage(d, method='complete')
+					ind = sch.fcluster(L, 0.5*d.max(), 'distance')
+					col = [sub.tolist()[i] for i in list((np.argsort(ind)))]
+					sub,_ = sub.reindex(col)
+			cols = sub.tolist()
+			columns.extend(cols)
+			i = j
+	corrMatrix = corrMatrix.reindex(columns, axis=0)
+	corrMatrix = corrMatrix.reindex(columns, axis=1)
+
+	np.fill_diagonal(corrMatrix.values, 0)
+	plot_corr(corrMatrix,np.array(names)[columns], ax=ax2)
+
 	plt.savefig(outputFile)
 	pic_IObytes = io.BytesIO()
 	plt.savefig(pic_IObytes,dpi=35,  format='png')
@@ -296,7 +378,7 @@ if(len(networks)>0):
 			"base64": pic_hash.decode("utf8"),
 	})
 	plt.close()
-		
+	
 exitApp()
 
 
