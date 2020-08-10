@@ -190,6 +190,7 @@ def drawGraph(graph,ax):
 	isWeighted = False
 	if("weight" in graph.edge_attributes()):
 		isWeighted= True
+		graph.es["weight"] = np.abs(graph.es["weight"])
 		maxWeight = np.max(graph.es["weight"])
 	for edge in graph.es:
 		source = edge.source
