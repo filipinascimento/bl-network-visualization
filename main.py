@@ -2,6 +2,7 @@
 
 import sys
 import os.path
+from os.path import join as PJ
 import re
 import json
 import math
@@ -15,6 +16,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 import base64
 import io 
+import jgf
 
 _styleColors = [
 	"#1f77b4",
@@ -49,9 +51,6 @@ def adjust_lightness(color, amount=0.5):
     c = colorsys.rgb_to_hls(*mc.to_rgb(c))
     return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
 
-def check_symmetric(a, rtol=1e-05, atol=1e-08):
-	return np.allclose(a, a.T, rtol=rtol, atol=atol)
-
 def isFloat(value):
 	if(value is None):
 		return False
@@ -61,8 +60,62 @@ def isFloat(value):
 	except ValueError:
 		return False
 
-def loadCSVMatrix(filename):
-	return np.loadtxt(filename,delimiter=",")
+
+class NumpyEncoder(json.JSONEncoder):
+	def default(self, obj):
+		if isinstance(obj, (np.int_, np.intc, np.intp, np.int8,
+			np.int16, np.int32, np.int64, np.uint8,
+			np.uint16, np.uint32, np.uint64)):
+			ret = int(obj)
+		elif isinstance(obj, (np.float_, np.float16, np.float32, np.float64)):
+			ret = float(obj)
+		elif isinstance(obj, (np.ndarray,)): 
+			ret = obj.tolist()
+		else:
+			ret = json.JSONEncoder.default(self, obj)
+
+		if isinstance(ret, (float)):
+			if math.isnan(ret):
+				ret = None
+
+		if isinstance(ret, (bytes, bytearray)):
+			ret = ret.decode("utf-8")
+
+		return ret
+
+results = {"errors": [], "warnings": [], "brainlife": [], "datatype_tags": [], "tags": []}
+
+def warning(msg):
+	global results
+	results['warnings'].append(msg) 
+	#results['brainlife'].append({"type": "warning", "msg": msg}) 
+	print(msg)
+
+def error(msg):
+	global results
+	results['errors'].append(msg) 
+	#results['brainlife'].append({"type": "error", "msg": msg}) 
+	print(msg)
+
+def exitApp():
+	global results
+	with open("product.json", "w") as fp:
+		json.dump(results, fp, cls=NumpyEncoder)
+	if len(results["errors"]) > 0:
+		sys.exit(1)
+	else:
+		sys.exit()
+
+def exitAppWithError(msg):
+	global results
+	results['errors'].append(msg) 
+	#results['brainlife'].append({"type": "error", "msg": msg}) 
+	print(msg)
+	exitApp()
+
+
+
+
 
 
 
@@ -72,29 +125,27 @@ if(argCount > 1):
 		configFilename = sys.argv[1]
 
 outputDirectory = "output"
+
 figuresOutputDirectory = os.path.join(outputDirectory, "figures")
+
+outputFile = PJ(outputDirectory,"network.json.gz")
 
 if(not os.path.exists(outputDirectory)):
 		os.makedirs(outputDirectory)
 
-if(not os.path.exists(figuresOutputDirectory)):
-		os.makedirs(figuresOutputDirectory)
-
 with open(configFilename, "r") as fd:
 		config = json.load(fd)
 
-# "index": "data/index.json",
-# "label": "data/label.json",
-# "csv": "data/csv",
+
+if(not os.path.exists(outputDirectory)):
+		os.makedirs(outputDirectory)
+
+
 # "color-property": "degree",
 # "size-property":"degree"
 
-indexFilename = config["index"]
-labelFilename = config["label"]
-CSVDirectory = config["csv"]
-
-colorProperty = "degree"
-sizeProperty = "degree"
+colorProperty = "Degree"
+sizeProperty = "Degree"
 plotLabels = True
 plotNullModels = True
 
@@ -109,18 +160,6 @@ if("plot-labels" in config):
 
 if("plot-null-models" in config):
 	plotNullModels = config["plot-null-models"]
-
-with open(indexFilename, "r") as fd:
-	indexData = json.load(fd)
-
-with open(labelFilename, "r") as fd:
-	labelData = json.load(fd)
-
-labels = [entry["name"].replace(".label","") for entry in labelData]
-
-productData = {
-	"brainlife":[]
-}
 
 def sortByFrequency(arr):
 	s = set(arr)
@@ -149,9 +188,9 @@ def drawGraph(graph,ax):
 	positionsY = positions[:,1]
 	lineWidths = []
 	isWeighted = False
-	if("weight" in g.edge_attributes()):
+	if("weight" in graph.edge_attributes()):
 		isWeighted= True
-		maxWeight = np.max(g.es["weight"])
+		maxWeight = np.max(graph.es["weight"])
 	for edge in graph.es:
 		source = edge.source
 		target = edge.target
@@ -191,127 +230,168 @@ def drawGraph(graph,ax):
 	ax.margins(0.01)
 	
 
-for entry in indexData:
-	entryFilename = entry["filename"]
+networks = jgf.igraph.load(config["network"],compressed=True)
 
-	alreadySigned = ("separated-sign" in entry) and entry["separated-sign"]
-
-	#inputfile,outputfile,signedOrNot
-	filenames = [entryFilename]
-	baseName,extension = os.path.splitext(entryFilename)
-
-	if(alreadySigned):
-		filenames += [baseName+"_negative%s"%(extension)]
-
-	if("null-models" in entry and plotNullModels):
-		nullCount = int(entry["null-models"])
-		filenames += [baseName+"-null_%d%s"%(i,extension) for i in range(nullCount)]
-		if(alreadySigned):
-			filenames += [baseName+"_negative-null_%d%s"%(i,extension) for i in range(nullCount)]
-
-	hasCommunities = False
-	if("community" in entry):
-		hasCommunities = (entry["community"]==True)
+#Online first network is plotted
+if(len(networks)>0):
+	network = networks[0]
+	weighted = "weight" in network.edge_attributes()
+	hasCommunities = "Community" in network.vertex_attributes()
 	
-	properties = {}
-	if("properties" in entry):
-		properties = {propName.lower():propName for propName in entry["properties"]}
-
-	for filename in tqdm(filenames):
-		adjacencyMatrix = loadCSVMatrix(os.path.join(CSVDirectory, filename))
-		directionMode=ig.ADJ_DIRECTED
-		weights = np.abs(adjacencyMatrix)
-		if(check_symmetric(adjacencyMatrix)):
-			directionMode=ig.ADJ_UPPER
-			weights = weights[np.triu_indices(weights.shape[0], k = 0)]
-		g = ig.Graph.Adjacency((adjacencyMatrix != 0).tolist(), directionMode)
-		weighted = False
-		if(not ((weights==0) | (weights==1)).all()):
-			g.es['weight'] = weights[weights != 0]
-			weighted = True
-		graph = g
-		graph.vs["degree"] = g.degree()
-		graph.vs["indegree"] = g.indegree()
-		graph.vs["outdegree"] = g.outdegree()
+	if("degree" not in network.vertex_attributes()):
+		network.vs["degree"] = network.degree()
+	if("inDegree" not in network.vertex_attributes()):
+		network.vs["indegree"] = network.indegree()
+	if("outDegree" not in network.vertex_attributes()):
+		network.vs["outdegree"] = network.outdegree()
+	if("strength" not in network.vertex_attributes()):
+		network.vs["strength"] = network.strength(weights = ('weight' if weighted else None))
+	if("instrength" not in network.vertex_attributes()):
+		network.vs["instrength"] = network.strength(mode="IN", weights = ('weight' if weighted else None))
+	if("outstrength" not in network.vertex_attributes()):
+		network.vs["outstrength"] = network.strength(mode="OUT", weights = ('weight' if weighted else None))
 		
-		graph.vs["strength"] = g.strength(weights = ('weight' if weighted else None))
-		graph.vs["instrength"] = g.strength(mode="IN", weights = ('weight' if weighted else None))
-		graph.vs["outstrength"] = g.strength(mode="OUT", weights = ('weight' if weighted else None))
-		sizeArray = graph.vs[sizeProperty]
-		maxProperty = max(sizeArray)
+	print(sizeProperty)
+	sizeArray = network.vs[sizeProperty]
+	maxProperty = max(sizeArray)
 
-		graph.vs["vertex_size"] = [x/maxProperty*200+4 for x in sizeArray]
+	network.vs["vertex_size"] = [x/maxProperty*200+4 for x in sizeArray]
+	
+	
+	if("Community" not in network.vertex_attributes() or colorProperty!="community"):
+		colormap = plt.get_cmap("winter")
+		if(colorProperty not in network.vertex_attributes()):
+			colorProperty="degree"
+		colorPropertyArray = np.array(network.vs[colorProperty])
+		colorPropertyTransformed = np.log(colorPropertyArray+1.0)
+		colorPropertyTransformed -= np.min(colorPropertyTransformed)
+		colorPropertyTransformed /= np.max(colorPropertyTransformed)
+	
+		network.vs["color"] = [convertColorToHex(*colormap(value)) for value in colorPropertyTransformed]
+	else:
+		communities = network.vs["Community"];
+		sortedCommunities = sortByFrequency(communities);
+		communityToColor = {community:(_styleColors[index] if index<len(_styleColors) else "#aaaaaa") for index,community in enumerate(sortedCommunities)};
+		network.vs["color"] = [communityToColor[community] for community in communities];
+	
+	for edgeIndex in range(network.ecount()):
+		sourceIndex = network.es[edgeIndex].source
+		network.es[edgeIndex]['color'] = network.vs["color"][sourceIndex]+"20"
+
+	outputFile = os.path.join(outputDirectory,"report.pdf")
+	fig, ax = plt.subplots(figsize=(10,10))
+	
+	drawGraph(network,ax)
+	plt.axis("off")
+	ax.set_facecolor("grey")
+	plt.savefig(outputFile)
+	pic_IObytes = io.BytesIO()
+	plt.savefig(pic_IObytes,dpi=35,  format='png')
+	pic_IObytes.seek(0)
+	pic_hash = base64.b64encode(pic_IObytes.read())
+	results["brainlife"].append( { 
+			"type": "image/png", 
+			"name": "Visualization",
+			"base64": pic_hash.decode("utf8"),
+	})
+	plt.close()
 		
-		inputBaseName,_ = os.path.splitext(filename)
-		communitiesFilePath = os.path.join(CSVDirectory,"%s_community.txt"%os.path.basename(inputBaseName))
+exitApp()
+
+
+
+
+
+
+
+
+# 		if(not isNullModel):
+# 			finalNodeMeasurements[aggregateName] = nodeProperties 
+# 			finalNetworkMeasurements[aggregateName] = networkProperties
+# 		else:
+# 			if(aggregateName not in nullmodelNodeMeasurements):
+# 				nullmodelNodeMeasurements[aggregateName] = {}
+# 				nullmodelNetworkMeasurements[aggregateName] = {}
+# 			for measurement,propData in nodeProperties.items():
+# 				if(measurement not in nullmodelNodeMeasurements[aggregateName]):
+# 					nullmodelNodeMeasurements[aggregateName][measurement] = []
+# 				nullmodelNodeMeasurements[aggregateName][measurement].append(propData)
+# 			for measurement,propData in networkProperties.items():
+# 				if(measurement not in nullmodelNetworkMeasurements[aggregateName]):
+# 					nullmodelNetworkMeasurements[aggregateName][measurement] = []
+# 				nullmodelNetworkMeasurements[aggregateName][measurement].append(propData)
+
 		
-		if(hasCommunities and os.path.exists(communitiesFilePath)):
-			communities = []
-			with open(communitiesFilePath, "r") as fd:
-				for line in fd:
-					communities.append(line.strip());
-			graph.vs["Community"] = communities;
+# 		outputBaseName,outputExtension = os.path.splitext(filename)
 
-		for propID,propName in properties.items():
-			propFilename = os.path.join(CSVDirectory,"%s_prop_%s.txt"%(os.path.basename(inputBaseName),propName))
-			if(os.path.exists(propFilename)):
-				propData = np.loadtxt(propFilename)
-				graph.vs[propID] = propData
-
-		if("Community" not in graph.vertex_attributes() or colorProperty!="community"):
-			colormap = plt.get_cmap("winter")
-			if(colorProperty not in graph.vertex_attributes()):
-				colorProperty="degree"
-			colorPropertyArray = np.array(graph.vs[colorProperty])
-			colorPropertyTransformed = np.log(colorPropertyArray+1.0)
-			colorPropertyTransformed -= np.min(colorPropertyTransformed)
-			colorPropertyTransformed /= np.max(colorPropertyTransformed)
+# 		if("Community" in g.vertex_attributes()):
+# 			with open(PJ(csvOutputDirectory,"%s_community.txt"%os.path.basename(outputBaseName)), "w") as fd:
+# 				for item in g.vs["Community"]:
+# 					fd.write("%s\n"%str(item))
 		
-			graph.vs["color"] = [convertColorToHex(*colormap(value)) for value in colorPropertyTransformed]
-		else:
-			communities = graph.vs["Community"];
-			sortedCommunities = sortByFrequency(communities);
-			communityToColor = {community:(_styleColors[index] if index<len(_styleColors) else "#aaaaaa") for index,community in enumerate(sortedCommunities)};
-			graph.vs["color"] = [communityToColor[community] for community in communities];
+# 		for nodeProperty,nodePropData in nodeProperties.items():
+# 			propFilename = PJ(csvOutputDirectory,"%s_prop_%s.txt"%(os.path.basename(inputBaseName),nodeProperty))
+# 			np.savetxt(propFilename,nodePropData);
+
+# 		if("properties" not in entry):
+# 			entry["properties"] = list(nodeProperties.keys());
+
+# 		with open(PJ(csvOutputDirectory,os.path.basename(filename)), "w") as fd:
+# 			if(weighted):
+# 				outputData = g.get_adjacency(attribute='weight').data
+# 			else:
+# 				outputData = g.get_adjacency().data
+# 			np.savetxt(fd,outputData,delimiter=",")
+
+# 	# print(finalNetworkMeasurements);
+# 	# nullmodelNodeMeasurements = {};
+
+# 	# print(nullmodelNetworkMeasurements);
+# 	# nullmodelNetworkMeasurements = {};
+# 	for aggregatorName in finalNetworkMeasurements:
+# 		with open(PJ(csvOutputDirectory,"%s__measurements.csv"%aggregatorName), "w") as fd:
+# 			fd.write("Measurement,Value,NullModels\n")
+# 			for measurement,value in finalNetworkMeasurements[aggregatorName].items():
+# 				fd.write("%s,%0.18g"%(measurement,value))
+# 				if(aggregatorName in nullmodelNetworkMeasurements
+# 					and measurement in nullmodelNetworkMeasurements[aggregatorName]):
+# 					nullValues = nullmodelNetworkMeasurements[aggregatorName][measurement]
+# 					fd.write(","+",".join(["%0.18g"%nullValue for nullValue in nullValues]))
+# 					_,bins = np.histogram([value]+nullValues,bins=30)
+# 					if(shallPlot):
+# 						fig = plt.figure(figsize= (8,5))
+# 						ax = plt.axes()
+# 						ax.hist(nullValues,bins=bins,density=True,color="#888888")
+# 						ax.hist([value],bins=bins,density=True,color="#cc1111")
+# 						ax.set_xlabel(measurement);
+# 						ax.set_ylabel("Density");
+# 						fig.savefig(PJ(figuresOutputDirectory,"network_hist_%s_%s.pdf"%(aggregatorName,measurement)));
+# 						plt.close(fig)
+# 				fd.write("\n")
+	
+# 	if(shallPlot):
+# 		for aggregatorName in finalNodeMeasurements:
+# 			for measurement,values in finalNodeMeasurements[aggregatorName].items():
+# 					nullValues = [];
+# 					if(aggregatorName in nullmodelNodeMeasurements
+# 						and measurement in nullmodelNodeMeasurements[aggregatorName]):
+# 						nullValues = list(np.array(nullmodelNodeMeasurements[aggregatorName][measurement]).flatten())
+# 					_,bins = np.histogram(list(values)+nullValues,bins=30)
+# 					fig = plt.figure(figsize= (8,5))
+# 					ax = plt.axes()
+# 					if(nullValues):
+# 						ax.hist(nullValues,bins=bins,density=True,color="#888888")
+# 					ax.hist(values,bins=bins,density=True,color="#cc1111",alpha=0.75)
+# 					ax.set_xlabel(measurement);
+# 					ax.set_ylabel("Density");
+# 					fig.savefig(PJ(figuresOutputDirectory,"nodes_hist_%s_%s.pdf"%(aggregatorName,measurement)));
+# 					plt.close(fig)
 		
-		for edgeIndex in range(graph.ecount()):
-			sourceIndex = graph.es[edgeIndex].source
-			graph.es[edgeIndex]['color'] = graph.vs["color"][sourceIndex]+"20"
 
-		outputBaseName,outputExtension = os.path.splitext(filename)
-		outputFile = os.path.join(figuresOutputDirectory,outputBaseName+".pdf")
-		fig, ax = plt.subplots(figsize=(10,10))
-		if(plotLabels):
-			g.vs["name"] = labels;
-		drawGraph(graph,ax)
-		plt.axis("off")
-		ax.set_facecolor("grey")
-		plt.savefig(outputFile)
-		pic_IObytes = io.BytesIO()
-		plt.savefig(pic_IObytes,dpi=35,  format='png')
-		pic_IObytes.seek(0)
-		pic_hash = base64.b64encode(pic_IObytes.read())
-		productData["brainlife"].append( { 
-				"type": "image/png", 
-				"name": outputBaseName,
-				"base64": pic_hash.decode("utf8"),
-		})
-		plt.close()
-		
-		
-		# with open(os.path.join(outputDirectory,os.path.basename(filename)), "w") as fd:
-		# 	if(weighted):
-		# 		outputData = g.get_adjacency(attribute='weight').data
-		# 	else:
-		# 		outputData = g.get_adjacency().data
-		# 	np.savetxt(fd,outputData,delimiter=",")
 
-with open(os.path.join(outputDirectory,"index.json"), "w") as fd:
-	json.dump(indexData,fd)
+# with open(PJ(outputDirectory,"index.json"), "w") as fd:
+# 	json.dump(indexData,fd)
 
-with open(os.path.join(outputDirectory,"label.json"), "w") as fd:
-	json.dump(labelData,fd)
-
-with open("product.json", "w") as fd:
-	json.dump(productData,fd)
+# with open(PJ(outputDirectory,"label.json"), "w") as fd:
+# 	json.dump(labelData,fd)
 

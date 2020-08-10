@@ -1,9 +1,6 @@
 {
-    "index": "data/index.json",
-    "label": "data/label.json",
-    "csv": "data/csv",
-    "color-property": "community",
-    "size-property":"strength",
-    "plot-labels": true,
-    "plot-null-models":false
+    "network": "data/network.json.gz",
+    "color-property": "Community",
+    "size-property":"Strength",
+    "plot-labels": true
 }
