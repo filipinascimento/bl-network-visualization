@@ -13,7 +13,7 @@ set -x
 
 echo "Configuring Singularity..."
 chmod +x main.py
-SINGULARITYENV_PYTHONNOUSERSITE=true singularity exec -e docker://filsilva/cxnetwork:0.1.0 ./main.py config.json
+SINGULARITYENV_PYTHONNOUSERSITE=true singularity exec -e docker://filsilva/cxnetwork:0.2.0 ./main.py config.json
 
 echo "done"
 
