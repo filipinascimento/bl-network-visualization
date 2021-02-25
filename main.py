@@ -265,7 +265,7 @@ networks = jgf.igraph.load(config["network"],compressed=True)
 
 #Online first network is plotted
 if(len(networks)>0):
-	network = networks[0]
+	network = networks[0].clusters().giant()
 	weighted = "weight" in network.edge_attributes()
 	hasCommunities = "Community" in network.vertex_attributes()
 	
@@ -365,6 +365,7 @@ if(len(networks)>0):
 	corrMatrix = corrMatrix.reindex(columns, axis=1)
 
 	np.fill_diagonal(corrMatrix.values, 0)
+	
 	plot_corr(corrMatrix,np.array(names)[columns], ax=ax2)
 
 	plt.savefig(outputFile)
