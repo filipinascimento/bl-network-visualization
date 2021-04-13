@@ -9,6 +9,7 @@ import math
 import numpy as np
 from tqdm import tqdm
 import igraph as ig
+import re
 
 import scipy
 import scipy.cluster.hierarchy as sch
@@ -46,6 +47,15 @@ _styleColors = [
 	"#9edae5",
 ];
 
+defaultNamePattern = re.compile('[0-9a-zA-Z]+\.[0-9a-zA-Z]+_(\w+).\w+')
+
+def convertName(name):
+	entries = defaultNamePattern.findall(name)
+	if(entries):
+		name = entries[0]
+	return name
+
+
 import matplotlib.pyplot as plt
 def plot_corr(df,names,size=10,ax=None):
 	'''Plot a graphical correlation matrix for a dataframe.
@@ -54,7 +64,6 @@ def plot_corr(df,names,size=10,ax=None):
 			df: pandas DataFrame
 			size: vertical and horizontal size of the plot'''
 	
-
 	# Compute the correlation matrix for the received dataframe
 	corr = df
 	
@@ -312,6 +321,12 @@ if(len(networks)>0):
 	outputFile = os.path.join(outputDirectory,"report.pdf")
 	fig, (ax,ax2) = plt.subplots(ncols=2,figsize=(20,10))
 	
+	if("name" in network.vertex_attributes()):
+		names = [convertName(name) for name in network.vs["name"]]
+		network.vs["name"] = names
+	else:
+		names = [str(i) for i in range(network.vcount())]
+	
 
 	drawGraph(network,ax)
 	ax.axis('off')
@@ -324,11 +339,6 @@ if(len(networks)>0):
 	else:
 		adjacencyMatrix = network.get_adjacency().data
 
-	if("name" in network.vertex_attributes()):
-		names = network.vs["name"]
-	else:
-		names = [str(i) for i in range(network.vcount())]
-		
 	df = pd.DataFrame(adjacencyMatrix)
 	corrMatrix = df.corr();
 
