@@ -4,6 +4,50 @@
 [![Run on Brainlife.io](https://img.shields.io/badge/Brainlife-bl.app.1-blue.svg)](https://doi.org/10.25663/brainlife.app.306)
 
 # Network Visualization
+
+<!-- brainlife-app:begin (generated from the App manifest; edit the manifest, not this block) -->
+
+> **Draws a static 2D visualisation of a network with the Large Graph Layout (LGL) force-directed algorithm in igraph, colouring and sizing nodes by a chosen property, and saves it as a PDF.**
+
+Loads a network in JGF format, lays it out with LGL and plots it with node colour and size taken from a node property (degree by default, or communities detected by another App), optionally with labels. Use it for a quick visual check of connectivity matrices or derived networks; edge weights must be non-negative.
+
+| | |
+|---|---|
+| 📥 **Inputs** | `generic/network` |
+| 📤 **Outputs** | `report/pdf` |
+| 🐳 **Container** | `filsilva/cxnetwork:0.2.0` |
+| ⚙️ **Resources** | 1 CPUs |
+| 🔗 **Run it** | [doi.org/10.25663/brainlife.app.306](https://doi.org/10.25663/brainlife.app.306) |
+
+#### 📥 Inputs
+
+| Input | Datatype | Required | Description |
+|---|---|---|---|
+| `network` | `generic/network` | yes | Input network. Currently, visualization only works if the edge weights are non negative. Please use the preprocess app to prepare the network. |
+
+#### 📤 Outputs
+
+| Output | Datatype | Description |
+|---|---|---|
+| `output` | `report/pdf` | Static visualization of the network in pdf. |
+
+<details>
+<summary><b>⚙️ Parameters</b> (3)</summary>
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `color-property` | string | `degree` | Uses the provided property as color. If the network has communities detected by the "Network Communities" App, you can provide "communitiy" to plot communities as colors. |
+| `size-property` | string | `degree` | Makes the size of nodes proportional to the provided property. |
+| `plot-labels` | boolean | `true` | Plot labels on top of nodes. |
+
+</details>
+
+📚 **References used by this App:**
+- Avesani P et al. The open diffusion data derivatives, brain data upcycling via integrated publishing of derivatives and reproducible open cloud services. Sci Data 6:69 (2019). [doi:10.1038/s41597-019-0073-y](https://doi.org/10.1038/s41597-019-0073-y)
+- Adai AT, Date SV, Wieland S, Marcotte EM. LGL: creating a map of protein function with an algorithm for visualizing very large biological networks. J Mol Biol 340(1):179-190 (2004). [doi:10.1016/j.jmb.2004.04.047](https://doi.org/10.1016/j.jmb.2004.04.047)
+
+<!-- brainlife-app:end -->
+
 This app generates simple visualizations for networks by using a force-directed algorithm. The current implementation uses the Large Graph Layout (LGL) algorithm.
 
 ### Authors
